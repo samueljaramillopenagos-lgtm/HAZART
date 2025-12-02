@@ -1,0 +1,942 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Dashboard Industrial - Monitoreo MQTT</title>
+    <style>
+        :root {
+            --primary-blue: #0066ff;
+            --dark-blue: #0044cc;
+            --deep-blue: #003399;
+            --light-blue: #0088ff;
+            --black: #0a0a0a;
+            --dark-gray: #1a1a1a;
+            --gray: #2a2a2a;
+            --white: #ffffff;
+            --success: #00cc66;
+            --warning: #ffaa00;
+            --danger: #ff3366;
+        }
+        
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: linear-gradient(135deg, var(--black) 0%, var(--dark-gray) 100%);
+            color: var(--white);
+            min-height: 100vh;
+            padding: 20px;
+        }
+        
+        .dashboard {
+            max-width: 1400px;
+            margin: 0 auto;
+        }
+        
+        .header {
+            text-align: center;
+            background: linear-gradient(135deg, var(--deep-blue) 0%, var(--primary-blue) 100%);
+            padding: 30px;
+            border-radius: 20px;
+            margin-bottom: 30px;
+            box-shadow: 0 10px 30px rgba(0, 102, 255, 0.3);
+            border: 1px solid var(--light-blue);
+        }
+        
+        .header h1 {
+            font-size: 2.5em;
+            margin-bottom: 10px;
+            text-shadow: 0 2px 10px rgba(0, 0, 0, 0.3);
+        }
+        
+        .header p {
+            font-size: 1.2em;
+            opacity: 0.9;
+        }
+        
+        .connection-status {
+            display: flex;
+            gap: 20px;
+            justify-content: center;
+            margin-top: 15px;
+            flex-wrap: wrap;
+        }
+        
+        .status-indicator {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            padding: 8px 15px;
+            background: rgba(0, 0, 0, 0.3);
+            border-radius: 20px;
+            font-size: 0.9em;
+        }
+        
+        .status-dot {
+            width: 10px;
+            height: 10px;
+            border-radius: 50%;
+            animation: pulse 2s infinite;
+        }
+        
+        .connected {
+            background-color: var(--success);
+        }
+        
+        .disconnected {
+            background-color: var(--danger);
+        }
+        
+        .grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(350px, 1fr));
+            gap: 25px;
+            margin-bottom: 30px;
+        }
+        
+        .card {
+            background: linear-gradient(145deg, var(--dark-gray) 0%, var(--gray) 100%);
+            padding: 25px;
+            border-radius: 20px;
+            box-shadow: 0 8px 25px rgba(0, 0, 0, 0.3);
+            border: 1px solid var(--deep-blue);
+            transition: all 0.3s ease;
+            position: relative;
+            overflow: hidden;
+        }
+        
+        .card::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            height: 4px;
+            background: linear-gradient(90deg, var(--primary-blue) 0%, var(--light-blue) 100%);
+        }
+        
+        .card:hover {
+            transform: translateY(-5px);
+            box-shadow: 0 15px 35px rgba(0, 102, 255, 0.2);
+        }
+        
+        .card.alarma {
+            background: linear-gradient(145deg, #330000 0%, #550000 100%);
+            border: 1px solid var(--danger);
+            animation: pulse 2s infinite;
+        }
+        
+        .card.alarma::before {
+            background: linear-gradient(90deg, var(--danger) 0%, #ff5588 100%);
+        }
+        
+        .card-title {
+            font-size: 1.3em;
+            margin-bottom: 15px;
+            color: var(--light-blue);
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+        
+        .value-container {
+            text-align: center;
+            margin: 20px 0;
+        }
+        
+        .value {
+            font-size: 3.5em;
+            font-weight: 800;
+            text-shadow: 0 2px 10px rgba(0, 0, 0, 0.5);
+            margin-bottom: 5px;
+        }
+        
+        .temp-value {
+            color: #ffaa00;
+            background: linear-gradient(45deg, #ffaa00, #ffcc00);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+        }
+        
+        .gas-value {
+            color: #00ff88;
+            background: linear-gradient(45deg, #00ff88, #00cc66);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+        }
+        
+        .unit {
+            font-size: 1.2em;
+            color: var(--light-blue);
+            opacity: 0.8;
+        }
+        
+        .topic-info {
+            background: rgba(0, 0, 0, 0.3);
+            padding: 10px;
+            border-radius: 10px;
+            margin-top: 15px;
+            font-family: 'Courier New', monospace;
+            font-size: 0.9em;
+            word-break: break-all;
+        }
+        
+        .controls {
+            display: flex;
+            gap: 15px;
+            margin-top: 20px;
+        }
+        
+        .btn {
+            background: linear-gradient(135deg, var(--primary-blue) 0%, var(--dark-blue) 100%);
+            color: white;
+            border: none;
+            padding: 12px 20px;
+            border-radius: 12px;
+            cursor: pointer;
+            font-weight: 600;
+            transition: all 0.3s ease;
+            flex: 1;
+            min-width: 120px;
+            box-shadow: 0 5px 15px rgba(0, 102, 255, 0.3);
+        }
+        
+        .btn:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 8px 20px rgba(0, 102, 255, 0.4);
+            background: linear-gradient(135deg, var(--light-blue) 0%, var(--primary-blue) 100%);
+        }
+        
+        .btn-danger {
+            background: linear-gradient(135deg, var(--danger) 0%, #cc0044 100%);
+            box-shadow: 0 5px 15px rgba(255, 51, 102, 0.3);
+        }
+        
+        .btn-danger:hover {
+            background: linear-gradient(135deg, #ff5588 0%, var(--danger) 100%);
+            box-shadow: 0 8px 20px rgba(255, 51, 102, 0.4);
+        }
+        
+        .config-section {
+            margin-top: 20px;
+        }
+        
+        .config-input {
+            width: 100%;
+            padding: 12px;
+            margin: 8px 0;
+            border: 2px solid var(--deep-blue);
+            border-radius: 10px;
+            background: var(--black);
+            color: var(--white);
+            font-size: 1em;
+        }
+        
+        .message-log {
+            background: rgba(0, 0, 0, 0.3);
+            border: 1px solid var(--deep-blue);
+            border-radius: 10px;
+            padding: 15px;
+            margin-top: 20px;
+            max-height: 200px;
+            overflow-y: auto;
+            font-family: 'Courier New', monospace;
+            font-size: 0.9em;
+        }
+        
+        .log-entry {
+            padding: 5px 0;
+            border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+        }
+        
+        .log-time {
+            color: var(--light-blue);
+            margin-right: 10px;
+        }
+        
+        .log-topic {
+            color: var(--success);
+            margin-right: 10px;
+        }
+        
+        .log-message {
+            color: var(--white);
+        }
+        
+        .chart-container {
+            height: 300px;
+            margin-top: 20px;
+            position: relative;
+        }
+        
+        .footer {
+            text-align: center;
+            margin-top: 40px;
+            padding: 20px;
+            color: var(--light-blue);
+            opacity: 0.8;
+            border-top: 1px solid var(--deep-blue);
+        }
+        
+        @keyframes pulse {
+            0%, 100% { 
+                opacity: 1;
+                transform: scale(1);
+            }
+            50% { 
+                opacity: 0.7;
+                transform: scale(1.05);
+            }
+        }
+        
+        @media (max-width: 768px) {
+            .grid {
+                grid-template-columns: 1fr;
+            }
+            
+            .header h1 {
+                font-size: 2em;
+            }
+            
+            .value {
+                font-size: 2.8em;
+            }
+            
+            .connection-status {
+                flex-direction: column;
+                align-items: center;
+            }
+        }
+    </style>
+    <!-- Chart.js para gráficos -->
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <!-- MQTT.js para conexión MQTT -->
+    <script src="https://unpkg.com/mqtt/dist/mqtt.min.js"></script>
+</head>
+<body>
+    <div class="dashboard">
+        <div class="header">
+            <h1>DASHBOARD INDUSTRIAL - MONITOREO MQTT</h1>
+            <p>Conectado a broker.emqx.io - Visualización en tiempo real</p>
+            
+            <div class="connection-status">
+                <div class="status-indicator">
+                    <div class="status-dot disconnected" id="mqttStatusDot"></div>
+                    <span id="mqttStatusText">Desconectado</span>
+                </div>
+                <div class="status-indicator">
+                    <div class="status-dot" id="dataStatusDot"></div>
+                    <span id="dataStatusText">Sin datos</span>
+                </div>
+                <div class="status-indicator">
+                    <div class="status-dot" id="alarmStatusDot"></div>
+                    <span id="alarmStatusText">Sin alarma</span>
+                </div>
+            </div>
+        </div>
+
+        <div class="grid">
+            <!-- Temperatura -->
+            <div class="card" id="tempCard">
+                <div class="card-title">
+                    <span>🌡️</span>
+                    <span>TEMPERATURA</span>
+                </div>
+                <div class="value-container">
+                    <div class="value temp-value" id="temperatura">--</div>
+                    <div class="unit">°C</div>
+                </div>
+                <div class="topic-info">
+                    <strong>Tópico:</strong> industrial/temperatura<br>
+                    <strong>Umbral:</strong> <span id="tempThreshold">60.0</span>°C
+                </div>
+                <div class="chart-container">
+                    <canvas id="tempChart"></canvas>
+                </div>
+            </div>
+
+            <!-- Nivel de Gas -->
+            <div class="card" id="gasCard">
+                <div class="card-title">
+                    <span>💨</span>
+                    <span>NIVEL DE GAS</span>
+                </div>
+                <div class="value-container">
+                    <div class="value gas-value" id="gasNivel">--</div>
+                    <div class="unit">PPM</div>
+                </div>
+                <div class="topic-info">
+                    <strong>Tópico:</strong> industrial/gas<br>
+                    <strong>Umbral:</strong> <span id="gasThreshold">300</span> PPM
+                </div>
+                <div class="chart-container">
+                    <canvas id="gasChart"></canvas>
+                </div>
+            </div>
+
+            <!-- Estado del Sistema -->
+            <div class="card" id="estadoCard">
+                <div class="card-title">
+                    <span>⚙️</span>
+                    <span>ESTADO DEL SISTEMA</span>
+                </div>
+                <div class="value-container">
+                    <div class="value" id="estadoSistema" style="font-size: 2.5em;">NORMAL</div>
+                </div>
+                <div class="topic-info">
+                    <strong>Tópico:</strong> industrial/estado<br>
+                    <strong>Alarma:</strong> industrial/alarma
+                </div>
+                <div class="controls">
+                    <button class="btn" onclick="controlBuzzer('on')">ACTIVAR ALARMA</button>
+                    <button class="btn btn-danger" onclick="controlBuzzer('off')">DESACTIVAR</button>
+                </div>
+                <div class="topic-info" style="margin-top: 15px;">
+                    <strong>Control:</strong> industrial/buzzer/control<br>
+                    <strong>Estado:</strong> industrial/buzzer/status
+                </div>
+            </div>
+        </div>
+
+        <div class="grid">
+            <!-- Configuración -->
+            <div class="card">
+                <div class="card-title">
+                    <span>⚙️</span>
+                    <span>CONFIGURACIÓN MQTT</span>
+                </div>
+                
+                <div class="config-section">
+                    <label>Broker MQTT:</label>
+                    <input type="text" id="mqttBroker" class="config-input" value="broker.emqx.io">
+                    
+                    <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-top: 10px;">
+                        <div>
+                            <label>Puerto:</label>
+                            <select id="mqttPort" class="config-input">
+                                <option value="1883">TCP: 1883</option>
+                                <option value="8883">SSL: 8883</option>
+                                <option value="8083">WebSocket: 8083</option>
+                                <option value="8084">WebSocket SSL: 8084</option>
+                                <option value="14567">QUIC: 14567</option>
+                            </select>
+                        </div>
+                        <div>
+                            <label>Protocolo:</label>
+                            <select id="mqttProtocol" class="config-input">
+                                <option value="ws">WebSocket</option>
+                                <option value="wss">WebSocket Secure</option>
+                                <option value="mqtt">TCP MQTT</option>
+                            </select>
+                        </div>
+                    </div>
+                    
+                    <div class="controls" style="margin-top: 20px;">
+                        <button class="btn" onclick="connectMQTT()" id="connectBtn">CONECTAR</button>
+                        <button class="btn btn-danger" onclick="disconnectMQTT()">DESCONECTAR</button>
+                    </div>
+                </div>
+                
+                <div class="topic-info" style="margin-top: 20px;">
+                    <strong>Tópicos Suscritos:</strong><br>
+                    • industrial/temperatura<br>
+                    • industrial/gas<br>
+                    • industrial/estado<br>
+                    • industrial/alarma<br>
+                    • industrial/buzzer/status<br>
+                    • industrial/config
+                </div>
+            </div>
+
+            <!-- Control y Configuración -->
+            <div class="card">
+                <div class="card-title">
+                    <span>🎛️</span>
+                    <span>CONTROL DEL SISTEMA</span>
+                </div>
+                
+                <div class="config-section">
+                    <label>Umbral de Temperatura (°C):</label>
+                    <input type="number" id="configTemp" class="config-input" value="60.0" step="0.1">
+                    
+                    <label>Umbral de Gas (PPM):</label>
+                    <input type="number" id="configGas" class="config-input" value="300">
+                    
+                    <button class="btn" onclick="enviarConfiguracion()" style="margin-top: 15px;">
+                        ENVIAR CONFIGURACIÓN
+                    </button>
+                </div>
+                
+                <div class="topic-info" style="margin-top: 20px;">
+                    <strong>Tópico Config:</strong> industrial/config<br>
+                    <strong>Formato:</strong> "temp:65.0,gas:350"
+                </div>
+            </div>
+
+            <!-- Log de Mensajes -->
+            <div class="card">
+                <div class="card-title">
+                    <span>📋</span>
+                    <span>LOG DE MENSAJES MQTT</span>
+                </div>
+                
+                <div class="message-log" id="messageLog">
+                    <!-- Los mensajes aparecerán aquí -->
+                </div>
+                
+                <div class="controls" style="margin-top: 15px;">
+                    <button class="btn" onclick="clearLog()">LIMPIAR LOG</button>
+                    <button class="btn" onclick="exportLog()">EXPORTAR LOG</button>
+                </div>
+                
+                <div class="topic-info" style="margin-top: 20px;">
+                    <strong>Última actualización:</strong><br>
+                    <span id="lastUpdate">--:--:--</span>
+                </div>
+            </div>
+        </div>
+
+        <div class="footer">
+            <p>Sistema de Monitoreo Industrial v2.0 | Conectado a broker.emqx.io | GitHub Pages</p>
+            <p style="font-size: 0.9em; margin-top: 10px;">
+                Puertos disponibles: 1883 (TCP) | 8883 (SSL) | 8083 (WS) | 8084 (WSS) | 14567 (QUIC)
+            </p>
+        </div>
+    </div>
+
+    <script>
+        // Variables globales
+        let mqttClient = null;
+        let isConnected = false;
+        let messageLog = [];
+        const maxLogEntries = 50;
+        
+        // Datos históricos para gráficos
+        let tempData = {
+            labels: [],
+            values: []
+        };
+        
+        let gasData = {
+            labels: [],
+            values: []
+        };
+        
+        // Configuración inicial
+        let config = {
+            tempThreshold: 60.0,
+            gasThreshold: 300,
+            lastUpdate: null
+        };
+        
+        // Inicializar gráficos
+        const tempChart = new Chart(
+            document.getElementById('tempChart').getContext('2d'),
+            {
+                type: 'line',
+                data: {
+                    labels: tempData.labels,
+                    datasets: [{
+                        label: 'Temperatura (°C)',
+                        data: tempData.values,
+                        borderColor: '#ffaa00',
+                        backgroundColor: 'rgba(255, 170, 0, 0.1)',
+                        borderWidth: 2,
+                        fill: true,
+                        tension: 0.4
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: {
+                        legend: { display: false }
+                    },
+                    scales: {
+                        y: {
+                            beginAtZero: true,
+                            grid: { color: 'rgba(255, 255, 255, 0.1)' },
+                            ticks: { color: '#ffffff' }
+                        },
+                        x: {
+                            grid: { color: 'rgba(255, 255, 255, 0.1)' },
+                            ticks: { color: '#ffffff' }
+                        }
+                    }
+                }
+            }
+        );
+        
+        const gasChart = new Chart(
+            document.getElementById('gasChart').getContext('2d'),
+            {
+                type: 'line',
+                data: {
+                    labels: gasData.labels,
+                    datasets: [{
+                        label: 'Gas (PPM)',
+                        data: gasData.values,
+                        borderColor: '#00ff88',
+                        backgroundColor: 'rgba(0, 255, 136, 0.1)',
+                        borderWidth: 2,
+                        fill: true,
+                        tension: 0.4
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: {
+                        legend: { display: false }
+                    },
+                    scales: {
+                        y: {
+                            beginAtZero: true,
+                            grid: { color: 'rgba(255, 255, 255, 0.1)' },
+                            ticks: { color: '#ffffff' }
+                        },
+                        x: {
+                            grid: { color: 'rgba(255, 255, 255, 0.1)' },
+                            ticks: { color: '#ffffff' }
+                        }
+                    }
+                }
+            }
+        );
+        
+        // Función para conectar al broker MQTT
+        function connectMQTT() {
+            if (isConnected && mqttClient) {
+                addLog('Ya conectado al broker');
+                return;
+            }
+            
+            const broker = document.getElementById('mqttBroker').value;
+            const port = document.getElementById('mqttPort').value;
+            const protocol = document.getElementById('mqttProtocol').value;
+            
+            // Construir URL de conexión
+            let url;
+            if (protocol === 'ws' || protocol === 'wss') {
+                url = `${protocol}://${broker}:${port}/mqtt`;
+            } else {
+                url = `ws://${broker}:${port}`;
+            }
+            
+            addLog(`Conectando a ${url}...`);
+            
+            // Opciones de conexión
+            const options = {
+                clean: true,
+                connectTimeout: 4000,
+                clientId: 'web_client_' + Math.random().toString(16).substr(2, 8),
+                username: '',
+                password: ''
+            };
+            
+            try {
+                mqttClient = mqtt.connect(url, options);
+                
+                mqttClient.on('connect', () => {
+                    isConnected = true;
+                    updateConnectionStatus(true);
+                    addLog('Conectado al broker MQTT');
+                    
+                    // Suscribirse a los tópicos
+                    const topics = [
+                        'industrial/temperatura',
+                        'industrial/gas',
+                        'industrial/estado',
+                        'industrial/alarma',
+                        'industrial/buzzer/status',
+                        'industrial/config'
+                    ];
+                    
+                    topics.forEach(topic => {
+                        mqttClient.subscribe(topic, (err) => {
+                            if (!err) {
+                                addLog(`Suscrito a: ${topic}`);
+                            }
+                        });
+                    });
+                });
+                
+                mqttClient.on('message', (topic, message) => {
+                    const msg = message.toString();
+                    const timestamp = new Date().toLocaleTimeString();
+                    
+                    addLog(`[${timestamp}] ${topic}: ${msg}`, topic);
+                    processMessage(topic, msg);
+                });
+                
+                mqttClient.on('error', (error) => {
+                    addLog(`Error MQTT: ${error}`);
+                    updateConnectionStatus(false);
+                });
+                
+                mqttClient.on('close', () => {
+                    isConnected = false;
+                    updateConnectionStatus(false);
+                    addLog('Desconectado del broker');
+                });
+                
+            } catch (error) {
+                addLog(`Error de conexión: ${error}`);
+                updateConnectionStatus(false);
+            }
+        }
+        
+        // Función para desconectar
+        function disconnectMQTT() {
+            if (mqttClient && isConnected) {
+                mqttClient.end();
+                isConnected = false;
+                updateConnectionStatus(false);
+            }
+        }
+        
+        // Procesar mensajes MQTT
+        function processMessage(topic, message) {
+            const now = new Date();
+            const timeString = now.toLocaleTimeString();
+            document.getElementById('lastUpdate').textContent = timeString;
+            
+            switch(topic) {
+                case 'industrial/temperatura':
+                    const temp = parseFloat(message);
+                    if (!isNaN(temp)) {
+                        document.getElementById('temperatura').textContent = temp.toFixed(2);
+                        
+                        // Actualizar gráfico
+                        tempData.values.push(temp);
+                        tempData.labels.push(timeString);
+                        if (tempData.values.length > 20) {
+                            tempData.values.shift();
+                            tempData.labels.shift();
+                        }
+                        tempChart.update();
+                        
+                        // Verificar umbral
+                        if (temp > config.tempThreshold) {
+                            document.getElementById('tempCard').classList.add('alarma');
+                            document.getElementById('dataStatusDot').style.backgroundColor = '#ff3366';
+                            document.getElementById('dataStatusText').textContent = 'Alta temperatura';
+                        } else {
+                            document.getElementById('tempCard').classList.remove('alarma');
+                        }
+                    }
+                    break;
+                    
+                case 'industrial/gas':
+                    const gas = parseInt(message);
+                    if (!isNaN(gas)) {
+                        document.getElementById('gasNivel').textContent = gas;
+                        
+                        // Actualizar gráfico
+                        gasData.values.push(gas);
+                        gasData.labels.push(timeString);
+                        if (gasData.values.length > 20) {
+                            gasData.values.shift();
+                            gasData.labels.shift();
+                        }
+                        gasChart.update();
+                        
+                        // Verificar umbral
+                        if (gas > config.gasThreshold) {
+                            document.getElementById('gasCard').classList.add('alarma');
+                            document.getElementById('dataStatusDot').style.backgroundColor = '#ff3366';
+                            document.getElementById('dataStatusText').textContent = 'Alto nivel de gas';
+                        } else {
+                            document.getElementById('gasCard').classList.remove('alarma');
+                        }
+                    }
+                    break;
+                    
+                case 'industrial/estado':
+                    document.getElementById('estadoSistema').textContent = message;
+                    if (message.includes('ALARMA')) {
+                        document.getElementById('estadoCard').classList.add('alarma');
+                        document.getElementById('alarmStatusDot').style.backgroundColor = '#ff3366';
+                        document.getElementById('alarmStatusText').textContent = 'ALARMA ACTIVA';
+                    } else {
+                        document.getElementById('estadoCard').classList.remove('alarma');
+                        document.getElementById('alarmStatusDot').style.backgroundColor = '#00cc66';
+                        document.getElementById('alarmStatusText').textContent = 'Sistema normal';
+                    }
+                    break;
+                    
+                case 'industrial/alarma':
+                    if (message === 'ALARMA_ACTIVADA') {
+                        document.getElementById('alarmStatusDot').style.backgroundColor = '#ff3366';
+                        document.getElementById('alarmStatusText').textContent = 'ALARMA ACTIVADA';
+                    } else if (message === 'ALARMA_DESACTIVADA') {
+                        document.getElementById('alarmStatusDot').style.backgroundColor = '#00cc66';
+                        document.getElementById('alarmStatusText').textContent = 'Alarma desactivada';
+                    }
+                    break;
+                    
+                case 'industrial/config':
+                    // Formato: "temp:65.0,gas:350"
+                    if (message.includes('temp:') && message.includes('gas:')) {
+                        const tempMatch = message.match(/temp:([\d.]+)/);
+                        const gasMatch = message.match(/gas:(\d+)/);
+                        
+                        if (tempMatch && gasMatch) {
+                            config.tempThreshold = parseFloat(tempMatch[1]);
+                            config.gasThreshold = parseInt(gasMatch[1]);
+                            
+                            document.getElementById('tempThreshold').textContent = config.tempThreshold.toFixed(1);
+                            document.getElementById('gasThreshold').textContent = config.gasThreshold;
+                            
+                            document.getElementById('configTemp').value = config.tempThreshold;
+                            document.getElementById('configGas').value = config.gasThreshold;
+                        }
+                    }
+                    break;
+            }
+        }
+        
+        // Control del buzzer
+        function controlBuzzer(action) {
+            if (!isConnected) {
+                alert('Primero conéctate al broker MQTT');
+                return;
+            }
+            
+            const topic = 'industrial/buzzer/control';
+            const message = action === 'on' ? 'ON' : 'OFF';
+            
+            mqttClient.publish(topic, message);
+            addLog(`Enviado a ${topic}: ${message}`);
+        }
+        
+        // Enviar configuración
+        function enviarConfiguracion() {
+            if (!isConnected) {
+                alert('Primero conéctate al broker MQTT');
+                return;
+            }
+            
+            const temp = parseFloat(document.getElementById('configTemp').value);
+            const gas = parseInt(document.getElementById('configGas').value);
+            
+            if (isNaN(temp) || isNaN(gas)) {
+                alert('Valores inválidos');
+                return;
+            }
+            
+            const message = `temp:${temp.toFixed(1)},gas:${gas}`;
+            mqttClient.publish('industrial/config', message);
+            addLog(`Configuración enviada: ${message}`);
+        }
+        
+        // Actualizar estado de conexión
+        function updateConnectionStatus(connected) {
+            const statusDot = document.getElementById('mqttStatusDot');
+            const statusText = document.getElementById('mqttStatusText');
+            const connectBtn = document.getElementById('connectBtn');
+            
+            if (connected) {
+                statusDot.className = 'status-dot connected';
+                statusText.textContent = 'Conectado';
+                connectBtn.disabled = true;
+                connectBtn.textContent = 'CONECTADO';
+                
+                document.getElementById('dataStatusDot').style.backgroundColor = '#00cc66';
+                document.getElementById('dataStatusText').textContent = 'Recibiendo datos';
+            } else {
+                statusDot.className = 'status-dot disconnected';
+                statusText.textContent = 'Desconectado';
+                connectBtn.disabled = false;
+                connectBtn.textContent = 'CONECTAR';
+                
+                document.getElementById('dataStatusDot').style.backgroundColor = '#666666';
+                document.getElementById('dataStatusText').textContent = 'Sin datos';
+            }
+        }
+        
+        // Agregar entrada al log
+        function addLog(message, topic = 'system') {
+            const timestamp = new Date().toLocaleTimeString();
+            const logEntry = {
+                time: timestamp,
+                topic: topic,
+                message: message
+            };
+            
+            messageLog.unshift(logEntry);
+            if (messageLog.length > maxLogEntries) {
+                messageLog.pop();
+            }
+            
+            // Actualizar UI
+            const logContainer = document.getElementById('messageLog');
+            const entryDiv = document.createElement('div');
+            entryDiv.className = 'log-entry';
+            entryDiv.innerHTML = `
+                <span class="log-time">[${timestamp}]</span>
+                <span class="log-topic">${topic}:</span>
+                <span class="log-message">${message}</span>
+            `;
+            
+            logContainer.insertBefore(entryDiv, logContainer.firstChild);
+            
+            // Limitar número de entradas visibles
+            while (logContainer.children.length > maxLogEntries) {
+                logContainer.removeChild(logContainer.lastChild);
+            }
+        }
+        
+        // Limpiar log
+        function clearLog() {
+            messageLog = [];
+            document.getElementById('messageLog').innerHTML = '';
+            addLog('Log limpiado');
+        }
+        
+        // Exportar log
+        function exportLog() {
+            let logText = '=== LOG DEL SISTEMA INDUSTRIAL ===\n';
+            logText += 'Fecha: ' + new Date().toLocaleString() + '\n';
+            logText += 'Broker: broker.emqx.io\n';
+            logText += '================================\n\n';
+            
+            messageLog.reverse().forEach(entry => {
+                logText += `[${entry.time}] ${entry.topic}: ${entry.message}\n`;
+            });
+            
+            const blob = new Blob([logText], { type: 'text/plain' });
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = `industrial_log_${new Date().toISOString().slice(0,10)}.txt`;
+            a.click();
+            URL.revokeObjectURL(url);
+        }
+        
+        // Auto-conectar al cargar la página
+        window.addEventListener('load', () => {
+            addLog('Dashboard Industrial iniciado');
+            addLog('Broker: broker.emqx.io');
+            addLog('Listo para conectar...');
+            
+            // Intentar auto-conectar después de 2 segundos
+            setTimeout(() => {
+                connectMQTT();
+            }, 2000);
+        });
+        
+        // Desconectar al cerrar la página
+        window.addEventListener('beforeunload', () => {
+            if (isConnected && mqttClient) {
+                mqttClient.end();
+            }
+        });
+    </script>
+</body>
+</html>
